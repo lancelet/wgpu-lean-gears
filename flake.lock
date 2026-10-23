@@ -1,0 +1,63 @@
+{
+  "nodes": {
+    "lean4-src": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1791820275,
+        "narHash": "sha256-WjyIRo2BvfnNq13r+YSnTc6VaYupKJIsgfQhFBMa0aU=",
+        "owner": "leanprover",
+        "repo": "lean4",
+        "rev": "eb6cafb7290e8bd5f2937522d8d804f58f02bafc",
+        "type": "github"
+      },
+      "original": {
+        "owner": "leanprover",
+        "ref": "v4.35.0",
+        "repo": "lean4",
+        "type": "github"
+      }
+    },
+    "libuv-src": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1707337207,
+        "narHash": "sha256-U68BmIQNpmIy3prS7LkYl+wvDJQNikoeFiKh50yQFoA=",
+        "owner": "libuv",
+        "repo": "libuv",
+        "rev": "e9f29cb984231524e3931aa0ae2c5dae1a32884e",
+        "type": "github"
+      },
+      "original": {
+        "owner": "libuv",
+        "ref": "v1.48.0",
+        "repo": "libuv",
+        "type": "github"
+      }
+    },
+    "nixpkgs": {
+      "locked": {
+        "lastModified": 1792506237,
+        "narHash": "sha256-Q/8KLB6jNfpaUN1HAedE/u/Et9feE/zYSsutBLKrCFk=",
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "5adc50831c259f87faeb09ddf930d43597197473",
+        "type": "github"
+      },
+      "original": {
+        "owner": "NixOS",
+        "ref": "nixpkgs-unstable",
+        "repo": "nixpkgs",
+        "type": "github"
+      }
+    },
+    "root": {
+      "inputs": {
+        "lean4-src": "lean4-src",
+        "libuv-src": "libuv-src",
+        "nixpkgs": "nixpkgs"
+      }
+    }
+  },
+  "root": "root",
+  "version": 7
+}

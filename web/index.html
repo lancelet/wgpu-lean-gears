@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lean Gears</title>
+  <style>
+    html, body { margin: 0; height: 100%; background: #0d0d14; color: #c8c8d0;
+                 font: 13px/1.4 system-ui, sans-serif; overflow: hidden; }
+    #canvas { display: block; width: 100vw; height: 100vh; touch-action: none; cursor: grab; }
+    #canvas:active { cursor: grabbing; }
+    #help { position: fixed; left: 12px; bottom: 10px; opacity: .6; }
+    #help a { color: inherit; }
+    #status { position: fixed; inset: 0; display: grid; place-items: center; pointer-events: none; }
+    #status.error { color: #ff7a7a; padding: 2em; text-align: center; }
+  </style>
+</head>
+<body>
+  <canvas id="canvas"></canvas>
+  <div id="status">loading…</div>
+  <div id="help">drag or two-finger scroll: rotate · pinch or wheel: zoom · space: pause · r: reset · wasm suspension: <span id="variant">?</span> ·
+    <a href="https://github.com/lancelet/wgpu-lean-gears">source</a> (an AI-written experiment)</div>
+  <script type="module" src="main.js"></script>
+</body>
+</html>

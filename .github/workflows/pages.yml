@@ -1,0 +1,71 @@
+# Build the web version (both JSPI and Asyncify variants) and publish it to
+# GitHub Pages. Nix provides the tools; `make site` does the build, exactly as
+# locally. Nothing built is ever committed.
+name: web
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: cachix/install-nix-action@v31
+
+      # Lean comes from elan, pinned by ./lean-toolchain.
+      - name: Cache elan toolchain
+        uses: actions/cache@v4
+        with:
+          path: ~/.elan
+          key: elan-${{ runner.os }}-${{ hashFiles('lean-toolchain') }}
+      - name: Install elan
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh \
+            | sh -s -- -y --default-toolchain none
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+
+      # Expensive, rarely-changing third-party builds: OpenCASCADE and libuv
+      # per exception model, Lean's Init as C, and emscripten's cache/ports.
+      - name: Cache third-party builds
+        uses: actions/cache@v4
+        with:
+          path: |
+            .toolchain/occt-web-*/install
+            .toolchain/libuv-web-*/out/libuv.a
+            .toolchain/stdlib-c-*
+            .toolchain/emcache
+          key: toolchain-${{ runner.os }}-${{ hashFiles('flake.lock', 'lean-toolchain', 'scripts/build-occt.sh', 'scripts/build-libuv-web.sh', 'scripts/gen-stdlib-c.sh') }}
+
+      - name: Build site
+        run: nix develop --command make -j"$(nproc)" site
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist/site
+
+  deploy:
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

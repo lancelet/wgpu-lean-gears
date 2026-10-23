@@ -1,0 +1,8 @@
+# Lake is used only to elaborate Lean and emit C (`lake build Main:c`).
+# Compiling and linking that C for web/macOS is the Makefile's job.
+name = "gears"
+defaultTargets = ["Gears"]
+
+[[lean_lib]]
+name = "Gears"
+roots = ["Main", "Gears"]
