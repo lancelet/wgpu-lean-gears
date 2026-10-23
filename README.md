@@ -93,8 +93,10 @@ files are ever checked in. It has three jobs:
 
 * **build**: a matrix with one runner per wasm variant (`jspi`, `asyncify`),
   running in parallel. Each needs its own OpenCASCADE build (different C++
-  exception model), and on a cold cache that's the slow part: well over an
-  hour on a 4-core runner. Each runner:
+  exception model), which is the slow part on a cold cache. Cold, each
+  variant took 23–27 minutes. The first version of this workflow built both
+  variants on one runner and took 2h12m; we didn't measure why it was so much
+  slower than two separate runners. Each runner:
   1. installs Nix and elan;
   2. restores its caches, each keyed only on the files that determine it:
      OpenCASCADE (`flake.lock`, `build-occt.sh`), libuv, `Init` as C
