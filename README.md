@@ -89,18 +89,26 @@ seconds.
 ## CI and the published page
 
 `.github/workflows/pages.yml` runs on every push and pull request. No built
-files are ever checked in. The workflow:
+files are ever checked in. It has three jobs:
 
-1. installs Nix and elan;
-2. restores six separate caches, each keyed only on the files that determine
-   it: OpenCASCADE for each of the two exception models (`flake.lock`,
-   `build-occt.sh`), libuv, `Init` as C (`lean-toolchain`, the generator
-   script), the Emscripten cache, and the compiled Lean runtime and `Init`
-   archives;
-3. runs `nix develop --command make site`, the same command as locally;
-4. saves any cache that missed, *even if the build failed or was cancelled*,
-   so a cold OpenCASCADE build is never thrown away;
-5. on `main` only, deploys `dist/site/` to GitHub Pages.
+* **build**: a matrix with one runner per wasm variant (`jspi`, `asyncify`),
+  running in parallel. Each needs its own OpenCASCADE build (different C++
+  exception model), and on a cold cache that's the slow part: well over an
+  hour on a 4-core runner. Each runner:
+  1. installs Nix and elan;
+  2. restores its caches, each keyed only on the files that determine it:
+     OpenCASCADE (`flake.lock`, `build-occt.sh`), libuv, `Init` as C
+     (`lean-toolchain`, the generator script), the Emscripten cache, and the
+     compiled Lean runtime and `Init` archives;
+  3. runs `nix develop --command make TARGET=web ASYNC=<variant>`, the same
+     command as locally;
+  4. uploads `gears.js` and `gears.wasm`;
+  5. saves any cache that missed, *even if the build failed, timed out or was
+     cancelled*, so a cold OpenCASCADE build is never thrown away.
+* **site**: downloads both variants and runs `scripts/assemble-site.sh`
+  (`make site` runs the same script locally) inside a small devShell
+  (`nix develop .#site`, just esbuild).
+* **deploy**: on `main` only, publishes `dist/site/` to GitHub Pages.
 
 All third-party compiler flags live in the build scripts, not the Makefile,
 so a script's hash is a complete cache key. A finished OpenCASCADE install
@@ -111,8 +119,7 @@ Nix store aren't cached; they probably download about as fast as they would
 restore.
 
 Only the web version is built in CI. The macOS app is built locally with
-`make TARGET=macos`. A cold CI build compiles OpenCASCADE twice (once per
-exception model) and takes much longer than a cached build.
+`make TARGET=macos`.
 
 ## Layout
 

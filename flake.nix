@@ -23,6 +23,8 @@
       forAll = f: nixpkgs.lib.genAttrs systems (s: f nixpkgs.legacyPackages.${s});
     in {
       devShells = forAll (pkgs: {
+        # Just enough to run scripts/assemble-site.sh (CI's final job).
+        site = pkgs.mkShellNoCC { packages = [ pkgs.esbuild ]; };
         default = pkgs.mkShellNoCC {
           packages = with pkgs; [
             emscripten   # emcc/em++/emar, wasm-ld, binaryen

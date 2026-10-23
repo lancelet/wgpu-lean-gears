@@ -210,14 +210,7 @@ SITE := dist/site
 web-jspi web-asyncify:
 	$(MAKE) TARGET=web ASYNC=$(@:web-%=%)
 site: web-jspi web-asyncify
-	rm -rf $(SITE)
-	mkdir -p $(SITE)/jspi $(SITE)/asyncify
-	cp dist/web-jspi/gears.js dist/web-jspi/gears.wasm $(SITE)/jspi/
-	cp dist/web-asyncify/gears.js dist/web-asyncify/gears.wasm $(SITE)/asyncify/
-	cp web/index.html $(SITE)/
-	esbuild web/main.ts --bundle --format=esm --target=es2022 \
-	  --define:BUILD_ASYNC='"auto"' --outfile=$(SITE)/main.js
-	@du -sh $(SITE)/*
+	scripts/assemble-site.sh dist/web-jspi dist/web-asyncify $(SITE)
 
 .PHONY: all run clean distclean site web-jspi web-asyncify
 .DEFAULT_GOAL := all
