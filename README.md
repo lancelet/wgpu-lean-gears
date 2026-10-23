@@ -220,6 +220,73 @@ Two more observations from this project:
   test the week it's introduced, not a year later. This repo's `gpu.c` +
   `platform_web.c` + JSPI `waitFrame` + `make site` is a working template.
 
+## Risks: the state of Lean → wasm (October 2026)
+
+**Short version:** Lean's C output is solid and isn't going anywhere, but
+**Lean on wasm is officially unsupported**. This project depends on a
+community-maintained path that needs its own tests on every Lean upgrade.
+
+**Is going through C the only way?** For full Lean 4 today, yes. Every project
+we found that runs real Lean code as wasm goes Lean → C → `emcc` (or clang).
+The alternatives don't cover full Lean:
+
+| Project | What it is |
+|---|---|
+| Lean's own LLVM backend (`lean -b`, Lake's `bc` facets) | Could in principle target wasm without Emscripten. Release toolchains are built without it: `lean --features` prints `[]`, and `lean -b` asserts "build with -DLLVM=ON". Its source still has TODOs about hard-coding the target's `size_t`. |
+| [leanexe](https://github.com/jsmorph/leanexe) | A direct wasm emitter with verification proofs, but for "a restricted Lean dialect". |
+| [lean-agentic](https://github.com/agenticsorg/lean-agentic) | A separate Lean-inspired language written in Rust. Lean 4 compatibility is future work. |
+| [lean-vir](https://github.com/ejgallego/lean-vir) | Runs Lean's IR *interpreter* in the browser. "Not a general Lean-to-Wasm compiler", and the interpreter itself is built via C. |
+| [LeanUI](https://github.com/FawadHa1der/leanui), [lean2wasm](https://github.com/T-Brick/lean2wasm), [lean4-skills](https://github.com/tamuratak/lean4-skills) | Lean apps → wasm via C + Emscripten, as here. LeanUI uses wasm64. |
+| [cauli/lean4-wasm-in-browser](https://github.com/cauli/lean4-wasm-in-browser), [lean4.js](https://github.com/timqian/lean4.js), [QED64](https://github.com/FawadHa1der/QED64) | Run the Lean *compiler/editor* in the browser, built via C + Emscripten. |
+
+**Will the C backend disappear?** Very unlikely:
+* Lean 4.30 [moved C emission onto the new compiler pipeline](https://lean-lang.org/doc/reference/latest/releases/v4.30.0/), so C is what the new compiler targets.
+* The FRO roadmaps ([Year 3](https://lean-lang.org/fro/roadmap/y3/), [Year 4 part 1](https://lean-lang.org/fro/roadmap/y4-1/)) plan code-generator improvements, not a new target.
+* Lean bootstraps from checked-in generated C (`stage0`).
+
+**But wasm itself is unsupported:**
+* Lean's releases shipped a wasm toolchain from November 2023 to v4.16, then
+  stopped. Asked on Zulip in October 2025, Kim Morrison (Lean FRO) said:
+  "WASM is no longer supported"
+  ([thread](https://leanprover-community.github.io/archive/stream/270676-lean4/topic/wasm.20build.html)).
+* Lean's Web Assembly and 32-bit CI jobs are disabled
+  ([#15181](https://github.com/leanprover/lean4/issues/15181),
+  [#15816](https://github.com/leanprover/lean4/pull/15816)), so nothing
+  upstream checks this path.
+* It is visibly bit-rotting:
+  * the Emscripten runtime stubs no longer compile
+    ([#14973](https://github.com/leanprover/lean4/issues/14973),
+    [#15181](https://github.com/leanprover/lean4/issues/15181)); we hit
+    `lean_uv_os_get_group` ourselves and skip `uv/*`;
+  * `wasm-ld` warns about signature mismatches for
+    `lean_io_create_tempfile`/`tempdir`;
+  * **since v4.29, 32-bit targets silently miscompile static constants**
+    ([#15816](https://github.com/leanprover/lean4/pull/15816), approved but
+    unmerged as of 2026-10-23).
+
+**About that miscompile.** Static objects in generated C use the
+`LEAN_SCALAR_PTR_LITERAL` macro, which picks its 32-bit form only when
+`LEAN_EMSCRIPTEN` is defined. Lean's own build defines it only for its C++, not
+for generated C. Without it, values are silently wrong: for example, a name
+literal gets the wrong hash and compares unequal to the same name built at run
+time. **This project avoids it only because the Makefile passes
+`-DLEAN_EMSCRIPTEN` to all generated C** (`LEAN_CFLAGS`), so that flag is
+load-bearing.
+
+**What we recommend:**
+1. **Pin the Lean version** (`lean-toolchain`, plus the `lean4-src` flake input).
+   Treat upgrades as porting work, not routine bumps.
+2. **Test that the wasm build behaves correctly, not just that it links.** CI here
+   builds, deploys and is smoke-tested by hand, but doesn't *run* the wasm,
+   because the runners have no GPU. A small Node-run Lean self-test (names,
+   hashes, strings, bignums, static constants) would catch silent miscompiles.
+3. **Consider wasm64 (Memory64), as LeanUI does.** With 8-byte pointers you
+   stay on the 64-bit code paths Lean actually tests, which removes this class
+   of 32-bit bugs. The cost is browser support: LeanUI lists Chrome/Edge 133+
+   and Firefox 134+, with Safari unsupported.
+4. **Upstream what you hit.** Reports and fixes from people using this path
+   seem to be what keeps it alive.
+
 ## Findings and recommendations
 
 **1. Lean → wasm works with stock tooling, but you have to assemble it.**
