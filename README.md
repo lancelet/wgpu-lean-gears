@@ -158,6 +158,61 @@ scripts/                   build-occt.sh, build-libuv-web.sh, gen-stdlib-c.sh, s
   small scripts, and the results are cached in `.toolchain/` per (target,
   exception model).
 
+## Designing for both web and native wgpu
+
+If you bind Lean to **wgpu-native** in another project, you can keep the door
+open to the web. Write against the standard **`webgpu.h`**, not wgpu-native's
+`wgpu.h` extensions. This repo shows it works: one `native/gpu.c` compiles
+against wgpu-native (macOS) and emdawnwebgpu (browser). Only three things
+differ: creating the surface, waiting for adapter and device requests, and
+presenting frames.
+
+What makes porting hard later is mostly native habits, roughly in order of
+pain:
+
+1. **Blocking on the GPU.** Native code can poll or wait anywhere: map a
+   buffer, spin on `wgpuDevicePoll`/`ProcessEvents`, read results back at
+   once. The browser can never block. Readbacks (`mapAsync`) are the classic
+   trap. Design the Lean API so GPU results come back asynchronously, for
+   example as a `Msg` in an Elm-style loop, not as a blocking `IO` call. JSPI
+   can cover a few waits (`wgpuInstanceWaitAny` here), but not blocking
+   everywhere.
+2. **Owning the frame loop.** In the browser, presentation happens when you
+   yield to `requestAnimationFrame`, and `wgpuSurfacePresent` *aborts* in
+   emdawnwebgpu. Make the app "wait for the next frame, then render one",
+   like `Platform.waitFrame` here, so the native present call is a detail of
+   one platform.
+3. **wgpu-native extensions.** Push constants, `wgpuDevicePoll`, SPIR-V/GLSL
+   shader input, polygon-mode line, pipeline statistics and other native-only
+   features don't exist in browsers. Write shaders in **WGSL only**. Put any
+   extension behind a feature check with a portable fallback.
+4. **Limits and optional features.** Browsers expose conservative, per-browser
+   limits: buffer sizes, storage buffers per stage, 256-byte uniform-offset
+   alignment, optional features. Request only what you need, read the limits
+   at startup, and test in more than one browser. Safari and Chrome differ.
+5. **Threads.** A wasm build without pthreads runs on one thread, and Lean
+   `Task`s run synchronously there. Keep GPU encoding and submission
+   single-threaded, and don't depend on parallel `Task`s for correctness.
+6. **Header drift.** wgpu-native's `webgpu.h` sometimes lags Dawn's. Here they
+   were nearly identical, including the `*_INIT` macros, but pin both versions
+   and expect the occasional `#ifdef`. Both are converging on the standard
+   webgpu-headers.
+7. **Binding the Rust crate instead of the C ABI.** Calling Rust `wgpu`
+   through a Rust shim puts the browser build in a separate wasm-bindgen
+   module that can't link with Emscripten's. Going through wgpu-native's C
+   header avoids that.
+
+Two more observations from this project:
+
+* **The hard part of going to the web is Lean, not wgpu.** Building the Lean
+  runtime and stdlib for wasm, single-threading, matching exception models
+  and suspending the stack (JSPI/Asyncify) were most of the work. The GPU
+  layer was the easy part.
+* **The cheapest insurance is a web target in CI from day one,** even one that
+  only clears the screen. Each native-only habit then fails a build or a smoke
+  test the week it's introduced, not a year later. This repo's `gpu.c` +
+  `platform_web.c` + JSPI `waitFrame` + `make site` is a working template.
+
 ## Findings and recommendations
 
 **1. Lean → wasm works with stock tooling, but you have to assemble it.**
