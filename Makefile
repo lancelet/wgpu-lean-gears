@@ -115,17 +115,17 @@ $(BUILD)/libInit.a: $(STDLIB_C)/.stamp | $(BUILD)/include/lean/config.h
 	  CC=$(CC) AR=$(AR) CFLAGS="$(LEAN_CFLAGS)"
 
 $(LIBUV)/out/libuv.a:
-	scripts/build-libuv-web.sh $(LIBUV) $(OPT) $(EH)
+	scripts/build-libuv-web.sh $(EHNAME) $(LIBUV)
 
-$(OCCT)/install/lib/libTKernel.a:
-	scripts/build-occt.sh web $(OCCT)/build $(OCCT)/install -O2 $(EH)
+$(OCCT)/install/.complete:
+	scripts/build-occt.sh web-$(EHNAME) $(OCCT)/build $(OCCT)/install
 
 PLATFORM_OBJ := $(BUILD)/native/platform_web.o
 $(BUILD)/native/%.o: native/%.c | $(BUILD)/include/lean/config.h
 	@mkdir -p $(@D)
 	$(CC) $(OPT) $(EH) $(PORT) -DLEAN_EMSCRIPTEN $(LEAN_INC) -c $< -o $@
 
-LIBS := $(BUILD)/libInit.a $(BUILD)/libleanrt.a $(LIBUV)/out/libuv.a $(OCCT)/install/lib/libTKernel.a
+LIBS := $(BUILD)/libInit.a $(BUILD)/libleanrt.a $(LIBUV)/out/libuv.a $(OCCT)/install/.complete
 
 LDFLAGS := $(OPT) $(EH) $(PORT) $(ASYNC_LDFLAGS) \
   -sALLOW_MEMORY_GROWTH=1 -sINITIAL_MEMORY=67108864 -sSTACK_SIZE=8388608 \
@@ -155,8 +155,8 @@ LEAN_INC := -I$(LEAN_PREFIX)/include
 LEAN_CFLAGS := $(OPT) $(LEAN_INC) -w
 MACOS_MIN := -mmacosx-version-min=15.0
 
-$(OCCT)/install/lib/libTKernel.a:
-	scripts/build-occt.sh macos $(OCCT)/build $(OCCT)/install -O2
+$(OCCT)/install/.complete:
+	scripts/build-occt.sh macos $(OCCT)/build $(OCCT)/install
 
 PLATFORM_OBJ := $(BUILD)/native/platform_macos.o
 $(BUILD)/native/%.o: native/%.c
@@ -166,7 +166,7 @@ $(BUILD)/native/%.o: native/%.m
 	@mkdir -p $(@D)
 	$(CC) $(OPT) $(MACOS_MIN) -fobjc-arc $(LEAN_INC) -I$(WGPU_NATIVE_DEV)/include -c $< -o $@
 
-LIBS := $(OCCT)/install/lib/libTKernel.a
+LIBS := $(OCCT)/install/.complete
 APPDIR := $(DIST)/LeanGears.app
 APP := $(APPDIR)/Contents/MacOS/lean-gears
 
@@ -199,7 +199,7 @@ $(BUILD)/lean/%.o: $(IR)/%.c | $(if $(filter web,$(TARGET)),$(BUILD)/include/lea
 	@mkdir -p $(@D)
 	$(CC) $(LEAN_CFLAGS) -c $< -o $@
 
-$(BUILD)/native/occt_gear.o: native/occt_gear.cpp $(OCCT)/install/lib/libTKernel.a
+$(BUILD)/native/occt_gear.o: native/occt_gear.cpp $(OCCT)/install/.complete
 	@mkdir -p $(@D)
 	$(CXX) $(OPT) $(EH) $(LEAN_INC) -I$(OCCT)/install/include/opencascade -std=c++17 -w -c $< -o $@
 

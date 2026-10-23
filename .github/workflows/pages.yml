@@ -1,6 +1,11 @@
 # Build the web version (both JSPI and Asyncify variants) and publish it to
 # GitHub Pages. Nix provides the tools; `make site` does the build, exactly as
 # locally. Nothing built is ever committed.
+#
+# Caching: each expensive component gets its own cache entry, keyed only on the
+# files that determine it, so changing one doesn't throw away the others. Every
+# entry is restored up front and saved at the end *even if the build failed or
+# was cancelled*, so a cold OpenCASCADE build is never wasted.
 name: web
 
 on:
@@ -14,7 +19,8 @@ permissions:
 
 concurrency:
   group: pages-${{ github.ref }}
-  cancel-in-progress: true
+  # Never cancel a main build (it may be filling the cache); do cancel stale PR builds.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   build:
@@ -25,29 +31,56 @@ jobs:
 
       - uses: cachix/install-nix-action@v31
 
-      # Lean comes from elan, pinned by ./lean-toolchain.
-      - name: Cache elan toolchain
-        uses: actions/cache@v4
-        with:
-          path: ~/.elan
-          key: elan-${{ runner.os }}-${{ hashFiles('lean-toolchain') }}
+      - name: Cache keys
+        id: keys
+        run: |
+          {
+            echo "occt_wasmeh=occt-web-wasmeh-${{ hashFiles('flake.lock', 'scripts/build-occt.sh') }}"
+            echo "occt_jseh=occt-web-jseh-${{ hashFiles('flake.lock', 'scripts/build-occt.sh') }}"
+            echo "libuv=libuv-web-${{ hashFiles('flake.lock', 'scripts/build-libuv-web.sh') }}"
+            echo "stdlib=stdlib-c-${{ hashFiles('lean-toolchain', 'scripts/gen-stdlib-c.sh') }}"
+            echo "emcache=emcache-${{ hashFiles('flake.lock') }}"
+            echo "leanlibs=leanlibs-${{ hashFiles('flake.lock', 'lean-toolchain', 'scripts/gen-stdlib-c.sh', 'Makefile', 'mk/archive.mk', 'config.mk') }}"
+          } >> "$GITHUB_OUTPUT"
+
+      # Lean comes from elan, pinned by ./lean-toolchain. Not cached: the
+      # toolchain is ~2.8 GB unpacked and downloads about as fast as a restore.
       - name: Install elan
         run: |
           curl -sSfL https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh \
             | sh -s -- -y --default-toolchain none
           echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
 
-      # Expensive, rarely-changing third-party builds: OpenCASCADE and libuv
-      # per exception model, Lean's Init as C, and emscripten's cache/ports.
-      - name: Cache third-party builds
-        uses: actions/cache@v4
+      - name: Restore OpenCASCADE (wasm exceptions)
+        id: occt-wasmeh
+        uses: actions/cache/restore@v4
+        with: { path: .toolchain/occt-web-wasmeh/install, key: "${{ steps.keys.outputs.occt_wasmeh }}" }
+      - name: Restore OpenCASCADE (JS exceptions)
+        id: occt-jseh
+        uses: actions/cache/restore@v4
+        with: { path: .toolchain/occt-web-jseh/install, key: "${{ steps.keys.outputs.occt_jseh }}" }
+      - name: Restore libuv
+        id: libuv
+        uses: actions/cache/restore@v4
+        with: { path: ".toolchain/libuv-web-*/out/libuv.a", key: "${{ steps.keys.outputs.libuv }}" }
+      - name: Restore Init as C
+        id: stdlib
+        uses: actions/cache/restore@v4
+        with: { path: .toolchain/stdlib-c-*, key: "${{ steps.keys.outputs.stdlib }}" }
+      - name: Restore emscripten cache
+        id: emcache
+        uses: actions/cache/restore@v4
+        with: { path: .toolchain/emcache, key: "${{ steps.keys.outputs.emcache }}" }
+      - name: Restore compiled Lean runtime + Init
+        id: leanlibs
+        uses: actions/cache/restore@v4
         with:
           path: |
-            .toolchain/occt-web-*/install
-            .toolchain/libuv-web-*/out/libuv.a
-            .toolchain/stdlib-c-*
-            .toolchain/emcache
-          key: toolchain-${{ runner.os }}-${{ hashFiles('flake.lock', 'lean-toolchain', 'scripts/build-occt.sh', 'scripts/build-libuv-web.sh', 'scripts/gen-stdlib-c.sh') }}
+            build/web-*/include
+            build/web-*/rt
+            build/web-*/libleanrt.a
+            build/web-*/libInit.a
+          key: ${{ steps.keys.outputs.leanlibs }}
 
       - name: Build site
         run: nix develop --command make -j"$(nproc)" site
@@ -55,6 +88,38 @@ jobs:
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist/site
+
+      # --- save whatever finished, even if the build failed or was cancelled ---
+      - name: Save OpenCASCADE (wasm exceptions)
+        if: always() && steps.occt-wasmeh.outputs.cache-hit != 'true' && hashFiles('.toolchain/occt-web-wasmeh/install/.complete') != ''
+        uses: actions/cache/save@v4
+        with: { path: .toolchain/occt-web-wasmeh/install, key: "${{ steps.keys.outputs.occt_wasmeh }}" }
+      - name: Save OpenCASCADE (JS exceptions)
+        if: always() && steps.occt-jseh.outputs.cache-hit != 'true' && hashFiles('.toolchain/occt-web-jseh/install/.complete') != ''
+        uses: actions/cache/save@v4
+        with: { path: .toolchain/occt-web-jseh/install, key: "${{ steps.keys.outputs.occt_jseh }}" }
+      - name: Save libuv
+        if: always() && steps.libuv.outputs.cache-hit != 'true' && hashFiles('.toolchain/libuv-web-wasmeh/out/libuv.a') != '' && hashFiles('.toolchain/libuv-web-jseh/out/libuv.a') != ''
+        uses: actions/cache/save@v4
+        with: { path: ".toolchain/libuv-web-*/out/libuv.a", key: "${{ steps.keys.outputs.libuv }}" }
+      - name: Save Init as C
+        if: always() && steps.stdlib.outputs.cache-hit != 'true' && hashFiles('.toolchain/stdlib-c-*/.stamp') != ''
+        uses: actions/cache/save@v4
+        with: { path: .toolchain/stdlib-c-*, key: "${{ steps.keys.outputs.stdlib }}" }
+      - name: Save emscripten cache
+        if: always() && steps.emcache.outputs.cache-hit != 'true' && hashFiles('.toolchain/emcache/ports/**') != ''
+        uses: actions/cache/save@v4
+        with: { path: .toolchain/emcache, key: "${{ steps.keys.outputs.emcache }}" }
+      - name: Save compiled Lean runtime + Init
+        if: always() && steps.leanlibs.outputs.cache-hit != 'true' && hashFiles('build/web-jspi/libInit.a') != '' && hashFiles('build/web-asyncify/libInit.a') != ''
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            build/web-*/include
+            build/web-*/rt
+            build/web-*/libleanrt.a
+            build/web-*/libInit.a
+          key: ${{ steps.keys.outputs.leanlibs }}
 
   deploy:
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'

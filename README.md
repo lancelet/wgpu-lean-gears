@@ -92,10 +92,23 @@ seconds.
 files are ever checked in. The workflow:
 
 1. installs Nix and elan;
-2. restores the cache of third-party builds (OpenCASCADE, libuv, `Init`-as-C,
-   and the emscripten cache), keyed on `flake.lock` and the build scripts;
+2. restores six separate caches, each keyed only on the files that determine
+   it: OpenCASCADE for each of the two exception models (`flake.lock`,
+   `build-occt.sh`), libuv, `Init` as C (`lean-toolchain`, the generator
+   script), the Emscripten cache, and the compiled Lean runtime and `Init`
+   archives;
 3. runs `nix develop --command make site`, the same command as locally;
-4. on `main` only, deploys `dist/site/` to GitHub Pages.
+4. saves any cache that missed, *even if the build failed or was cancelled*,
+   so a cold OpenCASCADE build is never thrown away;
+5. on `main` only, deploys `dist/site/` to GitHub Pages.
+
+All third-party compiler flags live in the build scripts, not the Makefile,
+so a script's hash is a complete cache key. A finished OpenCASCADE install
+is marked by `install/.complete`, so a half-installed build is never cached.
+Builds on `main` are never cancelled by a newer push, because they may be
+filling the cache; stale PR builds are cancelled. The Lean toolchain and the
+Nix store aren't cached; they probably download about as fast as they would
+restore.
 
 Only the web version is built in CI. The macOS app is built locally with
 `make TARGET=macos`. A cold CI build compiles OpenCASCADE twice (once per
