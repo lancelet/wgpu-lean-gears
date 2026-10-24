@@ -230,11 +230,12 @@ community-maintained path that needs its own tests on every Lean upgrade.
 
 **Is going through C the only way?** For full Lean 4 today, yes. Every project
 we found that runs real Lean code as wasm goes Lean → C → `emcc` (or clang).
-The alternatives don't cover full Lean:
+The alternatives don't cover full Lean yet:
 
 | Project | What it is |
 |---|---|
 | Lean's own LLVM backend (`lean -b`, Lake's `bc` facets) | Could in principle target wasm without Emscripten. Release toolchains are built without it: `lean --features` prints `[]`, and `lean -b` asserts "build with -DLLVM=ON". Its source still has TODOs about hard-coding the target's `size_t`. |
+| [cpehle/lean4 `feat/wasm-backend`](https://github.com/cpehle/lean4/tree/feat/wasm-backend) | The closest thing to a real Lean → wasm compiler: a `lean --wasm=` flag that lowers Lean's IR straight to relocatable wasm32 objects, with a cut-down runtime for wasi-sdk, a test suite and browser demos. It looks like excellent work, but it isn't mature enough to run this project yet. It has no IO, tasks or libuv, and the standard library (`Init`) isn't compiled to wasm; the demos stub what they need. It's an unofficial experiment by an outside contributor: upstream PR [#14851](https://github.com/leanprover/lean4/pull/14851) was closed unmerged by its author on 2026-08-20. |
 | [leanexe](https://github.com/jsmorph/leanexe) | A direct wasm emitter with verification proofs, but for "a restricted Lean dialect". |
 | [lean-agentic](https://github.com/agenticsorg/lean-agentic) | A separate Lean-inspired language written in Rust. Lean 4 compatibility is future work. |
 | [lean-vir](https://github.com/ejgallego/lean-vir) | Runs Lean's IR *interpreter* in the browser. "Not a general Lean-to-Wasm compiler", and the interpreter itself is built via C. |
